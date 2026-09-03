@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CDTI Campus Navigator PWA - แผนที่สถาบันเทคโนโลยีจิตรลดา</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Prompt Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Prompt', sans-serif;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        .dark ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        .map-container {
+            touch-action: none;
+            position: relative;
+            overflow: hidden;
+            background-color: #0b1329;
+        }
+        .room-node {
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+        .room-node:hover {
+            fill: #2563eb !important;
+            filter: drop-shadow(0 4px 8px rgba(37, 99, 235, 0.5));
+        }
+    </style>
+</head>
+<body class="h-full bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 py-3 flex items-center justify-between shadow-sm z-30 flex-shrink-0">
+        <div class="flex items-center space-x-3">
+            <button id="backToHomeBtn" onclick="returnToCampusMap()" class="hidden w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-200 hover:bg-blue-600 hover:text-white transition" title="กลับสู่แผนที่สถาบัน">
+                <i class="fa-solid fa-arrow-left"></i>
+            </button>
+            <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/25">
+                <i class="fa-solid fa-map-location-dot text-lg"></i>
+            </div>
+            <div>
+                <h1 id="headerTitle" class="font-bold text-base leading-tight">CDTI Map Nav PWA</h1>
+                <p id="headerSubtitle" class="text-xs text-slate-500 dark:text-slate-400">สถาบันเทคโนโลยีจิตรลดา (ถนนศรีอยุธยา)</p>
+            </div>
+        </div>
+        
+        <div class="flex items-center space-x-2">
+            <button id="installBtn" class="hidden px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition shadow-sm items-center space-x-1.5">
+                <i class="fa-solid fa-download"></i>
+                <span>ติดตั้งแอพ</span>
+            </button>
+            <button onclick="openModal('sosModal')" class="w-9 h-9 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center hover:bg-rose-100 transition" title="ฉุกเฉิน / รปภ">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </button>
+            <button onclick="toggleTheme()" class="w-9 h-9 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition" title="เปลี่ยนธีม">
+                <i class="fa-solid fa-moon dark:hidden text-slate-600"></i>
+                <i class="fa-solid fa-sun hidden dark:block text-amber-400"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="flex-1 flex flex-col md:flex-row relative overflow-hidden">
+        
+        <!-- Sidebar / Control Panel -->
+        <div id="sidebar" class="w-full md:w-96 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col z-20 shadow-lg md:shadow-none transition-all duration-300">
+            
+            <!-- Search & Filters -->
+            <div class="p-4 border-b border-slate-100 dark:border-slate-700 space-y-3">
+                <div class="relative">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </span>
+                    <input type="text" id="searchInput" oninput="filterLocations(this.value)" placeholder="ค้นหาอาคาร 604, ห้อง 4401, ห้องสมุด..." 
+                        class="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-slate-700/60 border-none rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition">
+                </div>
+
+                <div id="categoryFilters" class="flex space-x-2 overflow-x-auto pb-1 text-xs">
+                    <button onclick="setCategory('all')" class="category-btn px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium whitespace-nowrap transition shadow-sm">ทั้งหมด</button>
+                    <button onclick="setCategory('building')" class="category-btn px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap transition">อาคารเรียน (คลิก 604)</button>
+                    <button onclick="setCategory('canteen')" class="category-btn px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap transition">ศูนย์อาหาร/บริการ</button>
+                </div>
+
+                <!-- Building 604 Floor Selector -->
+                <div id="floorSelectorPanel" class="hidden space-y-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-blue-600 dark:text-blue-400">เลือกชั้นอาคาร 604 (ตามผังหนีไฟจริง)</span>
+                        <span id="currentFloorBadge" class="px-2 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-[10px] font-bold">ชั้น 4</span>
+                    </div>
+                    <div class="grid grid-cols-5 gap-1.5">
+                        <button onclick="switchFloor(1)" id="floorBtn1" class="floor-btn py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium rounded-lg text-xs transition">ชั้น 1</button>
+                        <button onclick="switchFloor(2)" id="floorBtn2" class="floor-btn py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium rounded-lg text-xs transition">ชั้น 2</button>
+                        <button onclick="switchFloor(3)" id="floorBtn3" class="floor-btn py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium rounded-lg text-xs transition">ชั้น 3</button>
+                        <button onclick="switchFloor(4)" id="floorBtn4" class="floor-btn py-1.5 bg-blue-600 text-white font-bold rounded-lg text-xs transition shadow-sm">ชั้น 4</button>
+                        <button onclick="switchFloor(5)" id="floorBtn5" class="floor-btn py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium rounded-lg text-xs transition">ชั้น 5</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Route Active Panel -->
+            <div id="routePanel" class="hidden p-4 bg-blue-50/70 dark:bg-blue-950/30 border-b border-blue-100 dark:border-blue-900/40 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">ระบบนำทางอัจฉริยะ</h3>
+                    <button onclick="clearRoute()" class="text-xs text-rose-500 hover:underline"><i class="fa-solid fa-xmark mr-1"></i>ยกเลิก</button>
+                </div>
+                <div class="space-y-1.5 text-xs">
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500 inline-block flex-shrink-0"></span>
+                        <span id="routeStartText" class="font-medium truncate">จุดเริ่มต้น: ทางเข้าหลักอาคาร</span>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="w-3 h-3 rounded-full bg-blue-600 inline-block flex-shrink-0"></span>
+                        <span id="routeEndText" class="font-medium truncate text-blue-700 dark:text-blue-300">ปลายทาง: ห้องประชุมใหญ่ 4401</span>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-3 rounded-xl border border-blue-200 dark:border-blue-900 flex items-center justify-between text-xs shadow-sm">
+                    <div>
+                        <p class="text-slate-500 dark:text-slate-400">ระยะทาง</p>
+                        <p id="routeDistance" class="font-bold text-sm text-slate-800 dark:text-slate-100">35 เมตร</p>
+                    </div>
+                    <div>
+                        <p class="text-slate-500 dark:text-slate-400">เวลาเดินเท้า</p>
+                        <p id="routeTime" class="font-bold text-sm text-emerald-600">1 นาที</p>
+                    </div>
+                    <button onclick="simulateWalking()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition shadow-sm">
+                        <i class="fa-solid fa-person-walking mr-1"></i>นำทาง
+                    </button>
+                </div>
+            </div>
+
+            <!-- Locations / Rooms List -->
+            <div id="locationsList" class="flex-1 overflow-y-auto p-4 space-y-2.5">
+                <!-- Dynamically populated -->
+            </div>
+            
+            <div class="p-3 bg-slate-100 dark:bg-slate-700/50 border-t border-slate-200 dark:border-slate-700 text-xs flex items-center justify-between text-slate-500 dark:text-slate-400">
+                <span id="statusFooter" class="flex items-center">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 inline-block animate-pulse"></span>
+                    ผังรวมสถาบัน (คลิกอาคาร 604 เพื่อดูผังภายใน)
+                </span>
+                <span class="font-medium">v4.1 PWA</span>
+            </div>
+        </div>
+
+        <!-- Map Viewport -->
+        <div class="flex-1 relative bg-slate-950 overflow-hidden flex items-center justify-center map-container" id="mapWrapper">
+            
+            <!-- Viewport Wrapper -->
+            <div id="mapViewport" class="absolute cursor-grab active:cursor-grabbing transition-transform duration-75 origin-center" style="width: 1400px; height: 1000px; left: 50%; top: 50%; margin-left: -700px; margin-top: -500px;">
+                
+                <!-- Campus Map Image (Home View) -->
+                <img id="campusMapImg" src="Map.jpg" alt="CDTI Campus Map Original" class="absolute inset-0 w-full h-full object-contain select-none">
+                
+                <!-- Building 604 SVG Floor Plan View (Hidden by default, shown when inside building 604) -->
+                <div id="building604Container" class="hidden absolute inset-0 bg-slate-900/98 flex items-center justify-center p-6">
+                    <div id="svgFloorPlanWrapper" class="w-full h-full relative flex items-center justify-center">
+                        <!-- Injected SVG -->
+                    </div>
+                </div>
+
+                <!-- Canvas Overlay for Route Lines -->
+                <canvas id="mapCanvas" width="1400" height="1000" class="absolute inset-0 w-full h-full pointer-events-none z-10"></canvas>
+
+                <!-- Hotspots Layer (Home view landmarks) -->
+                <div id="hotspotsLayer" class="absolute inset-0 z-20">
+                    <!-- Injected via JS -->
+                </div>
+            </div>
+
+            <!-- Floating Zoom Controls -->
+            <div class="absolute top-4 right-4 flex flex-col space-y-2 z-30">
+                <button onclick="zoomMap(1.25)" class="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl shadow-md flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition text-slate-700 dark:text-slate-200" title="ซูมเข้า">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+                <button onclick="zoomMap(0.8)" class="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl shadow-md flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition text-slate-700 dark:text-slate-200" title="ซูมออก">
+                    <i class="fa-solid fa-minus"></i>
+                </button>
+                <button onclick="resetMapView()" class="w-10 h-10 bg-white dark:bg-slate-800 rounded-xl shadow-md flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-700 transition text-slate-700 dark:text-slate-200" title="รีเซ็ตมุมมอง">
+                    <i class="fa-solid fa-compass"></i>
+                </button>
+            </div>
+
+            <!-- Bottom Prompt Badge (Building 604 Click Hint) -->
+            <div id="homePromptBadge" class="absolute bottom-6 left-1/2 transform -translate-x-1/2 bg-white/95 dark:bg-slate-800/95 backdrop-blur-md px-5 py-3 rounded-2xl shadow-2xl border-2 border-blue-500 flex items-center space-x-3 z-30">
+                <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-lg shadow-blue-500/50">
+                    604
+                </div>
+                <div>
+                    <p class="text-xs font-bold text-slate-900 dark:text-white">อาคาร 604 (สถาบันเทคโนโลยีจิตรลดา)</p>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400">คลิกที่อาคาร 604 บนแผนผังเพื่อสำรวจห้องเรียนตามผังหนีไฟจริง</p>
+                </div>
+                <button onclick="enterBuilding604()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition transform active:scale-95">
+                    เปิดผัง 604
+                </button>
+            </div>
+
+            <!-- Top Floating Navigation Active Banner -->
+            <div id="navBanner" class="hidden absolute top-4 left-4 right-4 md:left-auto md:right-20 md:w-96 bg-blue-600 text-white p-4 rounded-2xl shadow-xl z-30 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-person-walking-arrow-right"></i>
+                    </div>
+                    <div>
+                        <p class="text-xs text-blue-100">กำลังนำทางไปยัง...</p>
+                        <p id="navDestName" class="font-bold text-sm">ห้องประชุมใหญ่ 4401</p>
+                    </div>
+                </div>
+                <button onclick="stopNavigation()" class="px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium transition">
+                    สิ้นสุด
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-800 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden transform transition-all border border-slate-200 dark:border-slate-700">
+            <div class="h-36 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 relative flex items-end p-5">
+                <button onclick="closeModal('detailModal')" class="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-black/60 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+                <div class="flex items-center space-x-2">
+                    <span id="modalCategory" class="px-3 py-1 bg-white/20 backdrop-blur-md rounded-lg text-xs font-semibold text-white">ห้องเรียน / ห้องประชุม</span>
+                    <span id="modalCodeBadge" class="px-2.5 py-1 bg-blue-900/60 rounded-lg text-xs font-bold text-blue-200">4401</span>
+                </div>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <h2 id="modalTitle" class="text-2xl font-bold text-slate-800 dark:text-slate-100">ห้องประชุมใหญ่ 4401</h2>
+                    <p id="modalSub" class="text-xs text-blue-600 dark:text-blue-400 mt-1 font-semibold">อาคาร 604 ชั้น 4 (สถาบันเทคโนโลยีจิตรลดา)</p>
+                </div>
+                <p id="modalDesc" class="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">ห้องประชุมสัมมนาและจัดกิจกรรมขนาดใหญ่มหาวงวิทย์วิทประศาสน์</p>
+                
+                <div class="grid grid-cols-2 gap-3 pt-1">
+                    <div class="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <span class="text-[11px] text-slate-400 block font-medium">โซน / ตำแหน่ง</span>
+                        <span id="modalHours" class="text-xs font-semibold text-slate-700 dark:text-slate-200">โซนหลัก ชั้น 4</span>
+                    </div>
+                    <div class="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <span class="text-[11px] text-slate-400 block font-medium">อุปกรณ์ฉุกเฉินใกล้เคียง</span>
+                        <span id="modalZone" class="text-xs font-semibold text-slate-700 dark:text-slate-200">ถังดับเพลิง / ทางหนีไฟ</span>
+                    </div>
+                </div>
+
+                <div class="pt-3 flex space-x-3">
+                    <button id="modalActionBtn" onclick="startNavigationToSelected()" class="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-bold transition shadow-lg shadow-blue-500/25 flex items-center justify-center space-x-2">
+                        <i class="fa-solid fa-diamond-turn-right text-base"></i>
+                        <span>นำทางไปห้องนี้</span>
+                    </button>
+                    <button onclick="closeModal('detailModal')" class="px-4 py-3 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-xl text-sm font-medium transition">
+                        ปิด
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SOS Modal -->
+    <div id="sosModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-800 w-full max-w-sm rounded-2xl shadow-2xl p-6 space-y-4 text-center border border-slate-200 dark:border-slate-700">
+            <div class="w-16 h-16 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-600 mx-auto flex items-center justify-center text-2xl shadow-inner">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100">แจ้งเหตุฉุกเฉิน CDTI</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">ติดต่อเจ้าหน้าที่รักษาความปลอดภัยและศูนย์ช่วยเหลือสถาบัน</p>
+            </div>
+            <div class="space-y-2 pt-2">
+                <button onclick="triggerEmergencyCall('รปภ. สถาบันเทคโนโลยีจิตรลดา')" class="w-full py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-semibold transition shadow-md flex items-center justify-center space-x-2">
+                    <i class="fa-solid fa-shield-halved"></i>
+                    <span>โทรแจ้ง รปภ. CDTI</span>
+                </button>
+            </div>
+            <button onclick="closeModal('sosModal')" class="w-full py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-sm font-medium transition">
+                ยกเลิก
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 right-6 bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl z-50 transform translate-y-20 opacity-0 transition-all duration-300 flex items-center space-x-3 border border-slate-700">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-lg"></i>
+        <span id="toastText" class="text-sm font-medium">แจ้งเตือนระบบ</span>
+    </div>
+
+    <script>
+        // Campus Locations (Home View matching Map.jpg)
+        const campusLocations = [
+            { id: 604, name: 'อาคาร 604', code: '604', category: 'building', x: 1110, y: 780, w: 160, h: 90, desc: 'สถาบันเทคโนโลยีจิตรลดา อาคารเรียนหลัก ห้องปฏิบัติการ และศูนย์การเรียนรู้ (คลิกเพื่อดูผังภายในแต่ละชั้นตามแบบแปลนหนีไฟจริง)', hours: '08:00 - 18:00 น.', icon: 'fa-graduation-cap', clickable: true, featured: true, isBuilding604: true },
+            { id: 605, name: 'อาคาร 605', code: '605', category: 'building', x: 620, y: 780, w: 170, h: 90, desc: 'สถาบันเทคโนโลยีจิตรลดา อาคาร 605 ติดถนนศรีอยุธยา', hours: '08:00 - 18:00 น.', icon: 'fa-building-columns', clickable: true },
+            { id: 615, name: 'อาคาร 615', code: '615', category: 'building', x: 860, y: 780, w: 170, h: 90, desc: 'สถาบันเทคโนโลยีจิตรลดา อาคาร 615 ติดถนนศรีอยุธยา', hours: '08:00 - 18:00 น.', icon: 'fa-building-columns', clickable: true },
+            { id: 611, name: 'โรงเรียนจิตรลดาวิชาชีพ (611)', code: '611', category: 'building', x: 625, y: 170, w: 180, h: 105, desc: 'โรงเรียนจิตรลดาวิชาชีพ อาคาร 611 โซนเหนือ', hours: '08:00 - 16:30 น.', icon: 'fa-school', clickable: true },
+            { id: 633, name: 'โรงยิม 633', code: '633', category: 'building', x: 450, y: 185, w: 100, h: 90, desc: 'อาคารโรงยิมและสนามกีฬาในร่ม 633 พร้อมบริการสถาบัน', hours: '08:00 - 20:00 น.', icon: 'fa-person-running', clickable: true },
+            { id: 606, name: 'อาคารรับรอง 606', code: '606', category: 'building', x: 810, y: 580, w: 170, h: 110, desc: 'สำนักพระราชวัง สนามเสือป่า และอาคารรับรอง 606', hours: '08:30 - 16:30 น.', icon: 'fa-landmark', clickable: true },
+            { id: 101, name: 'ศูนย์อาหารและร้านค้า', code: 'Canteen', category: 'canteen', x: 260, y: 155, w: 120, h: 75, desc: 'ศูนย์อาหารและพื้นที่บริการอาหารสำหรับนักศึกษาและบุคลากร', hours: '07:00 - 18:00 น.', icon: 'fa-utensils', clickable: true },
+            { id: 102, name: 'ลานจอดรถหลัก', code: 'Parking', category: 'service', x: 220, y: 280, w: 100, h: 90, desc: 'ลานจอดรถบริเวณสนามฟุตบอล', hours: '24 ชั่วโมง', icon: 'fa-square-parking', clickable: true },
+            { id: 103, name: 'ธนาคาร ttb', code: 'ttb', category: 'service', x: 450, y: 780, w: 110, h: 90, desc: 'จุดบริการธนาคารทหารไทยธนชาต (ttb)', hours: '08:30 - 16:30 น.', icon: 'fa-building-columns', clickable: true },
+            { id: 104, name: 'สถานีบริการน้ำมัน PTT', code: 'PTT', category: 'service', x: 375, y: 145, w: 65, h: 90, desc: 'สถานีบริการน้ำมัน PTT และร้านสะดวกซื้อ', hours: '24 ชั่วโมง', icon: 'fa-gas-pump', clickable: true },
+            { id: 105, name: 'ร้านโกลเด้นเพลซ', code: 'Golden', category: 'canteen', x: 1100, y: 885, w: 90, h: 55, desc: 'ร้านค้าโกลเด้นเพลซ สาขาสถาบันเทคโนโลยีจิตรลดา', hours: '07:00 - 20:00 น.', icon: 'fa-store', clickable: true }
+        ];
+
+        // Building 604 Detailed Rooms per Floor (Matched with Emergency Exit floor plan references)
+        const building604Rooms = {
+            1: [
+                { id: '604-101', name: 'ห้องปฏิบัติการ (Lab)', code: 'Lab', desc: 'ห้องปฏิบัติการชั้น 1 อาคาร 604', category: 'room', icon: 'fa-flask', x: 120, y: 400, w: 180, h: 100, color: '#10b981' },
+                { id: '604-102', name: 'ห้องประชุมสุภัทรวาที', code: 'Conf-1', desc: 'ห้องประชุมชั้น 1 ทางปีกขวา', category: 'room', icon: 'fa-users', x: 620, y: 420, w: 180, h: 100, color: '#3b82f6' },
+                { id: '604-103', name: 'ลานหลักกุศล / โถงทางเข้า', code: 'Hall-1', desc: 'โถงทางเข้าหลักชั้น 1 อาคาร 604', category: 'room', icon: 'fa-door-open', x: 380, y: 350, w: 200, h: 120, color: '#64748b' }
+            ],
+            2: [
+                { id: '604-201', name: 'ห้องสมุด 1 (งานวิทยทรัพยากร)', code: 'Lib-1', desc: 'ห้องสมุดโซน 1 ชั้น 2', category: 'room', icon: 'fa-book', x: 550, y: 220, w: 220, h: 220, color: '#f97316' },
+                { id: '604-202', name: 'ห้องสมุด 2 (งานวิทยทรัพยากร มัลติมีเดีย)', code: 'Lib-2', desc: 'ห้องสมุดโซน 2 ชั้น 2', category: 'room', icon: 'fa-laptop', x: 280, y: 150, w: 260, h: 120, color: '#dc2626' },
+                { id: '604-203', name: 'ห้องเรียนรวม 4203', code: 'RM-4203', desc: 'ห้องเรียนรวมขนาดใหญ่ ชั้น 2', category: 'room', icon: 'fa-chalkboard-user', x: 220, y: 350, w: 180, h: 100, color: '#f59e0b' },
+                { id: '604-204', name: 'ห้องเรียนรวม 4202', code: 'RM-4202', desc: 'ห้องเรียนรวม ชั้น 2', category: 'room', icon: 'fa-chalkboard-user', x: 380, y: 450, w: 160, h: 90, color: '#8b5cf6' }
+            ],
+            3: [
+                { id: '604-301', name: 'ห้อง DATA CENTER 4301', code: 'DC-4301', desc: 'ห้องเซิร์ฟเวอร์และระบบเครือข่าย ชั้น 3', category: 'room', icon: 'fa-server', x: 580, y: 220, w: 150, h: 160, color: '#059669' },
+                { id: '604-302', name: 'ห้องเรียนรวม 4304', code: 'RM-4304', desc: 'ห้องเรียนรวม ชั้น 3', category: 'room', icon: 'fa-chalkboard-user', x: 580, y: 390, w: 150, h: 120, color: '#10b981' },
+                { id: '604-303', name: 'ห้องเรียนรวม 4308', code: 'RM-4308', desc: 'ห้องเรียนรวมขนาดใหญ่ ชั้น 3', category: 'room', icon: 'fa-chalkboard-user', x: 250, y: 350, w: 180, h: 120, color: '#f97316' },
+                { id: '604-304', name: 'ห้องปฏิบัติการคอมพิวเตอร์ 4303', code: 'Lab-4303', desc: 'ห้องปฏิบัติการคอมพิวเตอร์ ชั้น 3', category: 'room', icon: 'fa-computer', x: 580, y: 520, w: 150, h: 90, color: '#3b82f6' }
+            ],
+            4: [
+                { id: '604-401', name: 'ห้องประชุมใหญ่ 4401 (มหาวกวิทย์วิทประศาสน์)', code: 'Auditorium-4401', desc: 'ห้องประชุมใหญ่สัมมนาและจัดพิธีการ ชั้น 4', category: 'room', icon: 'fa-landmark', x: 550, y: 220, w: 260, h: 360, color: '#8b5cf6' },
+                { id: '604-402', name: 'ห้องประชุมสภา 4406', code: 'RM-4406', desc: 'ห้องประชุมสภาสถาบัน ชั้น 4', category: 'room', icon: 'fa-users', x: 260, y: 400, w: 220, h: 140, color: '#2563eb' },
+                { id: '604-403', name: 'ห้องประธาน 4407', code: 'RM-4407', desc: 'ห้องประชุมผู้บริหาร ชั้น 4', category: 'room', icon: 'fa-award', x: 120, y: 520, w: 160, h: 100, color: '#059669' },
+                { id: '604-404', name: 'ห้องปฏิบัติการไอที 401.5', code: 'Lab-401.5', desc: 'ห้องวิจัยและปฏิบัติการไอที ชั้น 4', category: 'room', icon: 'fa-microchip', x: 380, y: 220, w: 150, h: 100, color: '#3b82f6' }
+            ],
+            5: [
+                { id: '604-501', name: 'หอประชุมอเนกประสงค์ ชั้น 5', code: 'Hall-501', desc: 'พื้นที่จัดนิทรรศการและกิจกรรมพิเศษ ชั้น 5', category: 'room', icon: 'fa-star', x: 220, y: 220, w: 320, h: 140, color: '#3b82f6' },
+                { id: '604-502', name: 'ศูนย์นวัตกรรมและบ่มเพาะธุรกิจ', code: 'Incubation-502', desc: 'พื้นที่สร้างสรรค์นวัตกรรมนักศึกษา ชั้น 5', category: 'room', icon: 'fa-lightbulb', x: 570, y: 220, w: 180, h: 140, color: '#f59e0b' }
+            ]
+        };
+
+        let currentView = 'campus'; // 'campus' or 'building604'
+        let currentFloor = 4; // Default to Floor 4 as requested by image reference
+        let currentFilter = 'all';
+        let currentSearchQuery = '';
+        let selectedLocation = null;
+        let navigatingLocation = null;
+
+        // Map Pan & Zoom State variables
+        const mapViewport = document.getElementById('mapViewport');
+        let scale = 1;
+        let panX = 0;
+        let panY = 0;
+        let isDragging = false;
+        let startX, startY;
+
+        window.onload = function() {
+            renderCampusView();
+            setupMapInteractions();
+            initPWA();
+        };
+
+        function renderCampusView() {
+            currentView = 'campus';
+            document.getElementById('campusMapImg').classList.remove('hidden');
+            document.getElementById('building604Container').classList.add('hidden');
+            document.getElementById('backToHomeBtn').classList.add('hidden');
+            document.getElementById('floorSelectorPanel').classList.add('hidden');
+            document.getElementById('homePromptBadge').classList.remove('hidden');
+            document.getElementById('headerTitle').innerText = 'CDTI Map Nav PWA';
+            document.getElementById('headerSubtitle').innerText = 'สถาบันเทคโนโลยีจิตรลดา (ถนนศรีอยุธยา)';
+            document.getElementById('statusFooter').innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 inline-block animate-pulse"></span>ผังรวมสถาบัน (คลิกอาคาร 604 เพื่อดูผังภายใน)';
+
+            renderHotspots();
+            renderLocationsList();
+            drawMapCanvas();
+        }
+
+        function enterBuilding604() {
+            currentView = 'building604';
+            currentFloor = 4; // Start at Floor 4 matching reference image
+            document.getElementById('campusMapImg').classList.add('hidden');
+            document.getElementById('building604Container').classList.remove('hidden');
+            document.getElementById('backToHomeBtn').classList.remove('hidden');
+            document.getElementById('floorSelectorPanel').classList.remove('hidden');
+            document.getElementById('homePromptBadge').classList.add('hidden');
+            document.getElementById('headerTitle').innerText = 'อาคาร 604 (ผังภายใน ชั้น 4)';
+            document.getElementById('headerSubtitle').innerText = 'สถาบันเทคโนโลยีจิตรลดา - อ้างอิงจากแบบแปลนหนีไฟจริง';
+            document.getElementById('statusFooter').innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-500 mr-2 inline-block"></span>กำลังแสดงผังอาคาร 604 ชั้น ${currentFloor} (อ้างอิงผังหนีไฟจริง)`;
+
+            resetMapView();
+            renderBuilding604SVG();
+            renderLocationsList();
+            showToast('เข้าสู่ผังภายในอาคาร 604 (อ้างอิงผังหนีไฟจริง) สำเร็จ');
+        }
+
+        function switchFloor(floorNum) {
+            currentFloor = floorNum;
+            document.querySelectorAll('.floor-btn').forEach((btn, idx) => {
+                if ((idx + 1) === floorNum) {
+                    btn.className = 'floor-btn py-1.5 bg-blue-600 text-white font-bold rounded-lg text-xs transition shadow-sm';
+                } else {
+                    btn.className = 'floor-btn py-1.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium rounded-lg text-xs transition';
+                }
+            });
+            document.getElementById('currentFloorBadge').innerText = `ชั้น ${floorNum}`;
+            document.getElementById('headerTitle').innerText = `อาคาร 604 (ผังภายใน ชั้น ${floorNum})`;
+            document.getElementById('statusFooter').innerHTML = `<span class="w-2 h-2 rounded-full bg-blue-500 mr-2 inline-block"></span>กำลังแสดงผังอาคาร 604 ชั้น ${floorNum}`;
+            
+            renderBuilding604SVG();
+            renderLocationsList();
+        }
+
+        function renderBuilding604SVG() {
+            const wrapper = document.getElementById('svgFloorPlanWrapper');
+            const rooms = building604Rooms[currentFloor] || [];
+
+            let svgContent = `
+                <svg viewBox="0 0 950 650" class="w-full h-full max-w-5xl drop-shadow-2xl bg-slate-950 p-4 rounded-2xl border border-slate-800">
+                    <!-- Floor Plan Blueprint Outer Boundary -->
+                    <rect x="50" y="50" width="850" height="550" rx="20" fill="#0b1329" stroke="#3b82f6" stroke-width="3" />
+                    <!-- Title banner inside SVG -->
+                    <rect x="70" y="70" width="810" height="40" rx="8" fill="#1e293b" />
+                    <text x="475" y="95" fill="#38bdf8" font-size="16" font-weight="bold" text-anchor="middle">EMERGENCY EXIT & FLOOR PLAN - BUILDING 604 (FLOOR ${currentFloor})</text>
+                    
+                    <!-- Corridor / Main Hallway -->
+                    <path d="M 150 350 L 800 350 L 800 450 L 150 450 Z" fill="#0f172a" stroke="#334155" stroke-dasharray="6,6" stroke-width="2" />
+                    <text x="475" y="405" fill="#64748b" font-size="13" font-weight="bold" text-anchor="middle">-- โถงทางเดินหลัก / เส้นทางหนีไฟ (Corridor & Fire Exit Route) --</text>
+            `;
+
+            rooms.forEach(room => {
+                svgContent += `
+                    <g class="room-node" onclick="selectRoom('${room.id}')">
+                        <rect x="${room.x}" y="${room.y}" width="${room.w}" height="${room.h}" rx="12" fill="${room.color}" fill-opacity="0.3" stroke="${room.color}" stroke-width="2.5" />
+                        <text x="${room.x + room.w/2}" y="${room.y + room.h/2 - 8}" fill="#ffffff" font-size="13" font-weight="bold" text-anchor="middle">${room.name}</text>
+                        <text x="${room.x + room.w/2}" y="${room.y + room.h/2 + 14}" fill="#cbd5e1" font-size="11" font-weight="semibold" text-anchor="middle">[ ${room.code} ]</text>
+                    </g>
+                `;
+            });
+
+            svgContent += `</svg>`;
+            wrapper.innerHTML = svgContent;
+        }
+
+        function renderHotspots() {
+            const layer = document.getElementById('hotspotsLayer');
+            layer.innerHTML = '';
+
+            campusLocations.forEach(loc => {
+                const btn = document.createElement('div');
+                const is604 = loc.id === 604;
+                
+                // Clean map view with no floating boxes except Building 604 subtle pulse hint if needed
+                if (is604) {
+                    btn.className = `absolute transform -translate-x-1/2 -translate-y-1/2 rounded-2xl cursor-pointer bg-blue-500/10 hover:bg-blue-500/30 border-2 border-blue-400 z-30 transition`;
+                    btn.style.left = `${loc.x}px`;
+                    btn.style.top = `${loc.y}px`;
+                    btn.style.width = `${loc.w}px`;
+                    btn.style.height = `${loc.h}px`;
+                    btn.title = "คลิกเพื่อเข้าสู่ผังภายใน อาคาร 604";
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        enterBuilding604();
+                    };
+                    layer.appendChild(btn);
+                }
+            });
+        }
+
+        function renderLocationsList() {
+            const listContainer = document.getElementById('locationsList');
+            listContainer.innerHTML = '';
+
+            let items = [];
+            if (currentView === 'campus') {
+                items = campusLocations.filter(loc => {
+                    const matchesCategory = currentFilter === 'all' || loc.category === currentFilter;
+                    const matchesSearch = loc.name.toLowerCase().includes(currentSearchQuery.toLowerCase()) || 
+                                          loc.code.toLowerCase().includes(currentSearchQuery.toLowerCase());
+                    return matchesCategory && matchesSearch;
+                });
+            } else {
+                const rooms = building604Rooms[currentFloor] || [];
+                items = rooms.filter(room => {
+                    return room.name.toLowerCase().includes(currentSearchQuery.toLowerCase()) || 
+                           room.code.toLowerCase().includes(currentSearchQuery.toLowerCase());
+                });
+            }
+
+            if (items.length === 0) {
+                listContainer.innerHTML = `<div class="text-center py-8 text-xs text-slate-400">ไม่พบสถานที่หรือห้องเรียนที่ค้นหา</div>`;
+                return;
+            }
+
+            items.forEach(item => {
+                const card = document.createElement('div');
+                const is604Building = item.id === 604;
+
+                card.className = `p-3.5 rounded-xl border transition cursor-pointer flex items-center justify-between group ${
+                    is604Building ? 'bg-blue-50/90 dark:bg-blue-950/40 border-blue-500 shadow-md ring-2 ring-blue-400' : 'bg-white dark:bg-slate-700/40 border-slate-200 dark:border-slate-700 hover:border-blue-300'
+                }`;
+                
+                card.onclick = () => {
+                    if (currentView === 'campus' && item.isBuilding604) {
+                        enterBuilding604();
+                    } else if (currentView === 'campus') {
+                        selectLocation(item);
+                    } else {
+                        selectRoom(item.id);
+                    }
+                };
+                
+                card.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <div class="w-10 h-10 rounded-xl ${is604Building ? 'bg-blue-600 text-white shadow-md' : 'bg-blue-50 dark:bg-blue-950/60 text-blue-600'} flex items-center justify-center flex-shrink-0">
+                            <i class="fa-solid ${item.icon}"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center space-x-2">
+                                <span class="font-semibold text-sm text-slate-800 dark:text-slate-100">${item.name}</span>
+                                <span class="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded text-[10px] font-bold">${item.code}</span>
+                            </div>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">${item.desc}</p>
+                        </div>
+                    </div>
+                    <button onclick="event.stopPropagation(); ${currentView === 'campus' && item.isBuilding604 ? 'enterBuilding604()' : currentView === 'campus' ? `startRouteTo(${item.id})` : `startRouteToRoom('${item.id}')`}" class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-slate-700 hover:bg-blue-600 hover:text-white text-blue-600 flex items-center justify-center transition" title="${currentView === 'campus' && item.isBuilding604 ? 'เปิดผัง 604' : 'นำทาง'}">
+                        <i class="fa-solid ${currentView === 'campus' && item.isBuilding604 ? 'fa-building' : 'fa-diamond-turn-right'} text-xs"></i>
+                    </button>
+                `;
+                listContainer.appendChild(card);
+            });
+        }
+
+        function selectRoom(roomId) {
+            const rooms = building604Rooms[currentFloor] || [];
+            const room = rooms.find(r => r.id === roomId);
+            if (!room) return;
+
+            selectedLocation = room;
+            document.getElementById('modalTitle').innerText = room.name;
+            document.getElementById('modalCodeBadge').innerText = room.code;
+            document.getElementById('modalSub').innerText = `อาคาร 604 ชั้น ${currentFloor} (สถาบันเทคโนโลยีจิตรลดา)`;
+            document.getElementById('modalDesc').innerText = room.desc;
+            document.getElementById('modalHours').innerText = `ชั้น ${currentFloor} โซนอาคาร 604`;
+            document.getElementById('modalActionBtn').innerHTML = `<i class="fa-solid fa-diamond-turn-right text-base"></i><span>นำทางไปห้องนี้</span>`;
+
+            openModal('detailModal');
+        }
+
+        function selectLocation(loc) {
+            if (!loc.clickable) return;
+            selectedLocation = loc;
+            
+            document.getElementById('modalTitle').innerText = loc.name;
+            document.getElementById('modalCodeBadge').innerText = loc.code;
+            document.getElementById('modalSub').innerText = `รหัส: ${loc.code} (สถาบันเทคโนโลยีจิตรลดา)`;
+            document.getElementById('modalDesc').innerText = loc.desc;
+            document.getElementById('modalHours').innerText = loc.hours;
+            document.getElementById('modalActionBtn').innerHTML = `<i class="fa-solid fa-diamond-turn-right text-base"></i><span>นำทางไปที่นี่ทันที</span>`;
+            
+            openModal('detailModal');
+        }
+
+        function startRouteTo(id) {
+            const loc = campusLocations.find(l => l.id === id);
+            if (!loc) return;
+            
+            navigatingLocation = loc;
+            closeModal('detailModal');
+            drawMapCanvas();
+
+            document.getElementById('routePanel').classList.remove('hidden');
+            document.getElementById('routeEndText').innerText = `ปลายทาง: ${loc.name} (${loc.code})`;
+            
+            const dist = Math.round(Math.hypot(loc.x - 480, loc.y - 850) * 0.35);
+            document.getElementById('routeDistance').innerText = `${Math.max(60, dist)} เมตร`;
+            document.getElementById('routeTime').innerText = `${Math.max(1, Math.round(dist / 75))} นาที`;
+
+            document.getElementById('navBanner').classList.remove('hidden');
+            document.getElementById('navDestName').innerText = loc.name;
+
+            showToast(`เริ่มเส้นทางนำทางไปยัง ${loc.name}`);
+        }
+
+        function startRouteToRoom(roomId) {
+            const rooms = building604Rooms[currentFloor] || [];
+            const room = rooms.find(r => r.id === roomId);
+            if (!room) return;
+
+            navigatingLocation = room;
+            closeModal('detailModal');
+
+            document.getElementById('routePanel').classList.remove('hidden');
+            document.getElementById('routeEndText').innerText = `ปลายทาง: ${room.name} (อาคาร 604 ชั้น ${currentFloor})`;
+            document.getElementById('routeDistance').innerText = `35 เมตร`;
+            document.getElementById('routeTime').innerText = `1 นาที`;
+
+            document.getElementById('navBanner').classList.remove('hidden');
+            document.getElementById('navDestName').innerText = room.name;
+
+            showToast(`เริ่มเส้นทางนำทางไปยัง ${room.name}`);
+        }
+
+        function startNavigationToSelected() {
+            if (!selectedLocation) return;
+            if (currentView === 'campus') {
+                startRouteTo(selectedLocation.id);
+            } else {
+                startRouteToRoom(selectedLocation.id);
+            }
+        }
+
+        function stopNavigation() {
+            navigatingLocation = null;
+            document.getElementById('routePanel').classList.add('hidden');
+            document.getElementById('navBanner').classList.add('hidden');
+            drawMapCanvas();
+            showToast('สิ้นสุดการนำทางแล้ว');
+        }
+
+        function clearRoute() {
+            stopNavigation();
+        }
+
+        function returnToCampusMap() {
+            stopNavigation();
+            renderCampusView();
+        }
+
+        function simulateWalking() {
+            showToast('กำลังจำลองเส้นทางการเดินภายในอาคาร...');
+        }
+
+        function drawMapCanvas() {
+            const canvas = document.getElementById('mapCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (navigatingLocation && currentView === 'campus') {
+                ctx.strokeStyle = '#2563eb';
+                ctx.lineWidth = 10;
+                ctx.lineCap = 'round';
+                ctx.setLineDash([12, 10]);
+                ctx.beginPath();
+                ctx.moveTo(480, 850);
+                ctx.lineTo(navigatingLocation.x, navigatingLocation.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+
+        function setupMapInteractions() {
+            const wrapper = document.getElementById('mapWrapper');
+
+            wrapper.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                startX = e.clientX - panX;
+                startY = e.clientY - panY;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                panX = e.clientX - startX;
+                panY = e.clientY - startY;
+                updateMapTransform();
+            });
+
+            window.addEventListener('mouseup', () => { isDragging = false; });
+
+            wrapper.addEventListener('touchstart', (e) => {
+                if (e.touches.length === 1) {
+                    isDragging = true;
+                    startX = e.touches[0].clientX - panX;
+                    startY = e.touches[0].clientY - panY;
+                }
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if (!isDragging || e.touches.length !== 1) return;
+                panX = e.touches[0].clientX - startX;
+                panY = e.touches[0].clientY - startY;
+                updateMapTransform();
+            });
+
+            window.addEventListener('touchend', () => { isDragging = false; });
+        }
+
+        function updateMapTransform() {
+            mapViewport.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        }
+
+        function zoomMap(factor) {
+            scale = Math.min(Math.max(scale * factor, 0.6), 2.5);
+            updateMapTransform();
+        }
+
+        function resetMapView() {
+            scale = 1;
+            panX = 0;
+            panY = 0;
+            updateMapTransform();
+        }
+
+        function setCategory(cat) {
+            currentFilter = cat;
+            document.querySelectorAll('#categoryFilters .category-btn').forEach(btn => {
+                btn.className = 'category-btn px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap transition';
+            });
+            event.target.className = 'category-btn px-3 py-1.5 rounded-lg bg-blue-600 text-white font-medium whitespace-nowrap transition shadow-sm';
+            renderLocationsList();
+        }
+
+        function filterLocations(query) {
+            currentSearchQuery = query;
+            renderLocationsList();
+        }
+
+        function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        function triggerEmergencyCall(msg) { closeModal('sosModal'); showToast(`กำลังประสานงานเจ้าหน้าที่ ${msg}...`); }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastText').innerText = msg;
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => toast.classList.add('translate-y-20', 'opacity-0'), 3500);
+        }
+
+        function toggleTheme() { document.documentElement.classList.toggle('dark'); }
+
+        let deferredPrompt;
+        function initPWA() {
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                document.getElementById('installBtn').classList.remove('hidden');
+            });
+            document.getElementById('installBtn').addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    deferredPrompt.prompt();
+                    deferredPrompt = null;
+                    document.getElementById('installBtn').classList.add('hidden');
+                }
+            });
+        }
+    </script>
+</body>
+</html>
